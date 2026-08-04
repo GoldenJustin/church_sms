@@ -17,3 +17,11 @@ doc_events = {
 doctype_js = {
     "Church SMS": "public/js/church_sms.js"
 }
+
+# Fixtures - export workspace
+fixtures = [
+    {
+        "dt": "Workspace",
+        "filters": [["name", "=", "Church SMS"]]
+    }
+]
