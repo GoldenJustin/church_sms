@@ -380,3 +380,128 @@ def bulk_import_members(csv_data):
             results["errors"].append(f"{row.get('full_name', 'Unknown')}: {result.get('message', 'Unknown error')}")
     
     return results
+
+
+@frappe.whitelist()
+def diagnose_sms_setup():
+    """Diagnose SMS setup and show detailed information"""
+    result = []
+    
+    try:
+        # Get settings
+        settings = frappe.get_single("Church SMS Settings")
+        
+        result.append("📋 **Church SMS Settings:**")
+        result.append(f"- API Key (username): `{settings.api_key}`")
+        result.append(f"- API Secret (API key): `{'*' * 8}...{settings.get_password('api_secret')[-4:] if settings.get_password('api_secret') else 'NOT SET'}`")
+        result.append(f"- Default Sender ID: `{settings.default_sender_id or 'NOT SET'}`")
+        result.append("")
+        
+        username = settings.api_key
+        api_key = settings.get_password("api_secret")
+        
+        if not username or not api_key:
+            result.append("❌ **Missing credentials**")
+            result.append("Please set both API Key and API Secret in Church SMS Settings")
+            return "\n".join(result)
+        
+        # Test 1: Try Africa's Talking with current mapping
+        result.append("🧪 **Test 1: Africa's Talking API (Current Mapping)**")
+        result.append(f"- Username: `{username}`")
+        result.append(f"- API Key: `{api_key[:8]}...{api_key[-4:]}`")
+        
+        try:
+            url = "https://api.africastalking.com/version1/user"
+            headers = {
+                "Accept": "application/json",
+                "apiKey": api_key
+            }
+            params = {"username": username}
+            
+            response = requests.get(url, headers=headers, params=params, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                user_data = data.get("UserData", {})
+                balance = user_data.get("balance", "Unknown")
+                result.append(f"✅ **SUCCESS!**")
+                result.append(f"- Balance: {balance}")
+                result.append(f"- Your credentials are correct!")
+                return "\n".join(result)
+            else:
+                result.append(f"❌ Failed: HTTP {response.status_code}")
+                try:
+                    error_data = response.json()
+                    result.append(f"- Error: {error_data.get('ErrorMessage', response.text)}")
+                except:
+                    result.append(f"- Response: {response.text[:200]}")
+        except Exception as e:
+            result.append(f"❌ Error: {str(e)}")
+        
+        result.append("")
+        
+        # Test 2: Try with swapped credentials
+        result.append("🧪 **Test 2: Africa's Talking (Swapped Mapping)**")
+        result.append(f"- Username: `{api_key[:20]}...`")
+        result.append(f"- API Key: `{username}`")
+        
+        try:
+            headers = {
+                "Accept": "application/json",
+                "apiKey": username  # Swapped
+            }
+            params = {"username": api_key}  # Swapped
+            
+            response = requests.get(url, headers=headers, params=params, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                user_data = data.get("UserData", {})
+                balance = user_data.get("balance", "Unknown")
+                result.append(f"✅ **SUCCESS with swapped credentials!**")
+                result.append(f"- Balance: {balance}")
+                result.append(f"")
+                result.append(f"⚠️ **Your credentials are swapped in Church SMS Settings!**")
+                result.append(f"Please swap them:")
+                result.append(f"- API Key field should be: `{api_key}`")
+                result.append(f"- API Secret field should be: `{username}`")
+                return "\n".join(result)
+            else:
+                result.append(f"❌ Failed: HTTP {response.status_code}")
+        except Exception as e:
+            result.append(f"❌ Error: {str(e)}")
+        
+        result.append("")
+        
+        # Test 3: Check if it's a sandbox account
+        result.append("🧪 **Test 3: Africa's Talking Sandbox**")
+        try:
+            sandbox_url = "https://api.sandbox.africastalking.com/version1/user"
+            headers = {
+                "Accept": "application/json",
+                "apiKey": api_key
+            }
+            params = {"username": "sandbox"}
+            
+            response = requests.get(sandbox_url, headers=headers, params=params, timeout=10)
+            
+            if response.status_code == 200:
+                result.append("✅ Sandbox API is accessible")
+                result.append("If you're using sandbox, your username should be 'sandbox'")
+            else:
+                result.append(f"❌ Sandbox test failed: HTTP {response.status_code}")
+        except Exception as e:
+            result.append(f"❌ Error: {str(e)}")
+        
+        result.append("")
+        result.append("💡 **Next Steps:**")
+        result.append("1. Verify your Africa's Talking credentials at https://account.africastalking.com")
+        result.append("2. Check if you're using sandbox or production")
+        result.append("3. Ensure your API key has SMS permissions")
+        result.append("4. If using a different SMS provider, let me know which one")
+        
+    except Exception as e:
+        result.append(f"❌ **Error:** {str(e)}")
+        frappe.log_error(frappe.get_traceback(), "SMS Diagnosis Error")
+    
+    return "\n".join(result)
