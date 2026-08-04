@@ -1,0 +1,12 @@
+*.pyc
+__pycache__
+*.egg-info
+dist
+build
+.tox
+.venv
+node_modules
+*.swp
+.idea
+.vscode
+*.log

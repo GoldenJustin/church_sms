@@ -1,0 +1,10 @@
+include MANIFEST.in
+include requirements.txt
+include *.json
+include *.md
+include *.py
+include *.txt
+recursive-include church_sms *.css
+recursive-include church_sms *.js
+recursive-include church_sms *.json
+recursive-include church_sms *.py
