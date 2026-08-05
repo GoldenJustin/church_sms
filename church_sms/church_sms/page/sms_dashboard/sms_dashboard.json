@@ -1,0 +1,19 @@
+{
+ "content": null,
+ "creation": "2026-08-05 12:00:00",
+ "docstatus": 0,
+ "doctype": "Page",
+ "icon": "fa fa-bar-chart",
+ "idx": 0,
+ "modified": "2026-08-05 12:00:00",
+ "modified_by": "Administrator",
+ "module": "ChurchSMS",
+ "name": "sms-dashboard",
+ "owner": "Administrator",
+ "page_name": "sms-dashboard",
+ "roles": [],
+ "script": null,
+ "standard": "Yes",
+ "system_page": 0,
+ "title": "SMS Dashboard"
+}
