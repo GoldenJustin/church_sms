@@ -5,18 +5,18 @@ from frappe import _
 
 @frappe.whitelist()
 def send_church_sms(send_to, message, sender_id, branch="", members=None):
-    """Send SMS to church members via Africa's Talking API"""
+    """Send SMS to church members via Kilakona API"""
     try:
         # Get SMS settings
         settings = frappe.get_single("Church SMS Settings")
         
-        username = settings.api_key
-        api_key = settings.get_password("api_secret")
+        username = settings.api_key  # developerbeneth
+        password = settings.get_password("api_secret")  # Should be: Kilakona@2025#%
         
-        if not username or not api_key:
+        if not username or not password:
             return {
                 "success": False,
-                "message": "❌ SMS API credentials not configured. Go to Church SMS Settings and set API Key and API Secret."
+                "message": "❌ SMS API credentials not configured. Go to Church SMS Settings and set API Key (username) and API Secret (password)."
             }
         
         if not sender_id:
@@ -34,10 +34,10 @@ def send_church_sms(send_to, message, sender_id, branch="", members=None):
         # Remove duplicates
         phone_numbers = list(set(phone_numbers))
         
-        # Send SMS
-        result = send_sms_via_at(
+        # Send SMS via Kilakona (try multiple methods)
+        result = send_sms_via_kilakona(
             username=username,
-            api_key=api_key,
+            password=password,
             sender_id=sender_id,
             phone_numbers=phone_numbers,
             message=message
@@ -50,10 +50,9 @@ def send_church_sms(send_to, message, sender_id, branch="", members=None):
             }
         else:
             error_detail = result.get("error", "Unknown error")
-            troubleshooting = get_troubleshooting_tips(error_detail)
             return {
                 "success": False,
-                "message": "❌ Failed to send SMS\n\nError: " + error_detail + "\n\n" + troubleshooting
+                "message": "❌ Failed to send SMS\n\nError: " + error_detail
             }
             
     except Exception as e:
@@ -63,29 +62,6 @@ def send_church_sms(send_to, message, sender_id, branch="", members=None):
             "success": False,
             "message": "❌ System Error: " + error_msg + "\n\nCheck Error Log for details."
         }
-
-
-def get_troubleshooting_tips(error_msg):
-    """Provide troubleshooting tips based on error message"""
-    error_lower = error_msg.lower()
-    
-    if "401" in error_msg or "authentication" in error_lower or "invalid" in error_lower:
-        return "💡 **Troubleshooting:**\n- Check Church SMS Settings\n- API Key field = your Africa's Talking username (e.g., 'developerbeneth')\n- API Secret field = your Africa's Talking API key (long string)\n- Verify credentials at https://account.africastalking.com"
-    
-    elif "sender" in error_lower or "alphanumeric" in error_lower:
-        return "💡 **Troubleshooting:**\n- Sender ID must be registered with Africa's Talking\n- Go to Church SMS Settings and update Default Sender ID\n- Or leave it blank to use your account's default sender"
-    
-    elif "insufficient" in error_lower or "balance" in error_lower:
-        return "💡 **Troubleshooting:**\n- Your Africa's Talking account has insufficient balance\n- Top up at https://account.africastalking.com"
-    
-    elif "timeout" in error_lower:
-        return "💡 **Troubleshooting:**\n- Network timeout - try again in a moment\n- Check your internet connection"
-    
-    elif "connection" in error_lower:
-        return "💡 **Troubleshooting:**\n- Cannot connect to Africa's Talking API\n- Check internet connection\n- Africa's Talking might be down - try again later"
-    
-    else:
-        return "💡 **Troubleshooting:**\n- Check Error Log for detailed error\n- Verify Africa's Talking account is active\n- Contact support if issue persists"
 
 
 def get_recipients(send_to, branch="", members=None):
@@ -131,380 +107,192 @@ def get_recipients(send_to, branch="", members=None):
 
 
 def format_phone(phone):
-    """Format phone number to international format (+255...)"""
+    """Format phone number - keep as-is for Kilakona (they handle formatting)"""
     if not phone:
         return None
     
     phone = str(phone).strip()
     phone = phone.replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
     
+    # Remove + if present (most SMS gateways don't need it)
     if phone.startswith("+"):
         phone = phone[1:]
     
-    if phone.startswith("0"):
-        phone = "255" + phone[1:]
-    elif not phone.startswith("255") and len(phone) >= 9:
-        phone = "255" + phone
-    
-    if len(phone) < 11:
+    # Keep the number as-is (let Kilakona handle country codes)
+    if len(phone) < 9:
         return None
     
-    return "+" + phone
+    return phone
 
 
-def send_sms_via_at(username, api_key, sender_id, phone_numbers, message):
-    """Send SMS via Africa's Talking API with detailed logging"""
+def send_sms_via_kilakona(username, password, sender_id, phone_numbers, message):
+    """
+    Send SMS via Kilakona API
+    Try multiple common authentication and request patterns
+    """
+    
+    # Log the attempt
+    frappe.log_error(
+        title="Church SMS - Kilakona Attempt",
+        message=f"Username: {username}\nRecipients: {len(phone_numbers)}\nSender: {sender_id}\nMessage: {message[:100]}"
+    )
+    
+    # Try Method 1: Basic Auth with JSON
+    result = try_kilakona_method1(username, password, sender_id, phone_numbers, message)
+    if result.get("success"):
+        return result
+    
+    # Try Method 2: Form POST with credentials in body
+    result = try_kilakona_method2(username, password, sender_id, phone_numbers, message)
+    if result.get("success"):
+        return result
+    
+    # Try Method 3: GET request with query params
+    result = try_kilakona_method3(username, password, sender_id, phone_numbers, message)
+    if result.get("success"):
+        return result
+    
+    # All methods failed
+    return {
+        "success": False,
+        "error": "All authentication methods failed. Please verify:\n1. Username is correct\n2. Password is correct\n3. Account has SMS credits\n4. Sender ID is registered\n\nCheck Error Log for detailed responses."
+    }
+
+
+def try_kilakona_method1(username, password, sender_id, phone_numbers, message):
+    """Method 1: Basic Auth with JSON POST"""
     try:
-        url = "https://api.africastalking.com/version1/messaging"
+        import base64
+        url = "http://sms.kilakona.co.tz/api/sendsms"
         
-        recipients = ",".join(phone_numbers)
-        
-        # Headers
+        auth_string = base64.b64encode(f"{username}:{password}".encode()).decode()
         headers = {
             "Accept": "application/json",
-            "Content-Type": "application/x-www-form-urlencoded",
-            "apiKey": api_key
+            "Content-Type": "application/json",
+            "Authorization": f"Basic {auth_string}"
         }
         
-        # Payload
         payload = {
             "username": username,
-            "to": recipients,
+            "password": password,
+            "sender": sender_id,
             "message": message,
+            "phones": ",".join(phone_numbers)
         }
         
-        if sender_id and sender_id.strip():
-            payload["from"] = sender_id.strip()
+        frappe.log_error(
+            title="Church SMS - Method 1 (Basic Auth JSON)",
+            message=f"URL: {url}\nPayload: {json.dumps(payload)}"
+        )
         
-        # Log request (for debugging)
-        log_data = {
-            "username": username,
-            "recipients_count": len(phone_numbers),
-            "recipients": recipients[:100] + "..." if len(recipients) > 100 else recipients,
-            "sender_id": sender_id,
-            "message": message[:100]
-        }
-        frappe.logger().info(f"Church SMS Request: {json.dumps(log_data)}")
+        response = requests.post(url, json=payload, headers=headers, timeout=30)
         
-        # Make request
-        response = requests.post(url, data=payload, headers=headers, timeout=30)
-        
-        # Log response
-        frappe.logger().info(f"Church SMS Response {response.status_code}: {response.text}")
+        frappe.log_error(
+            title="Church SMS - Method 1 Response",
+            message=f"Status: {response.status_code}\nResponse: {response.text}"
+        )
         
         if response.status_code in [200, 201]:
-            try:
-                result = response.json()
-            except:
-                return {
-                    "success": True,
-                    "details": "SMS sent (response not JSON): " + response.text[:200]
-                }
-            
-            # Parse response
-            if "SMSMessageData" in result:
-                sms_data = result["SMSMessageData"]
-                recipients_data = sms_data.get("Recipients", [])
-                
-                sent_count = 0
-                failed_count = 0
-                errors = []
-                
-                for r in recipients_data:
-                    status_code = r.get("statusCode")
-                    if status_code in [100, 101, 102]:
-                        sent_count += 1
-                    else:
-                        failed_count += 1
-                        error = r.get("status", "Unknown error")
-                        if error and error not in errors:
-                            errors.append(error)
-                
-                details = f"✅ Sent: {sent_count}"
-                if failed_count > 0:
-                    details += f"\n❌ Failed: {failed_count}"
-                    if errors:
-                        details += f"\n\nErrors: {'; '.join(errors[:3])}"
-                
-                # Add cost info if available
-                if "totalCost" in sms_data:
-                    cost = sms_data.get("totalCost")
-                    currency = sms_data.get("cost", "").split()[0] if "cost" in sms_data else ""
-                    if cost:
-                        details += f"\n\n💰 Cost: {currency} {cost}"
-                
-                return {
-                    "success": sent_count > 0,
-                    "details": details,
-                    "response": result
-                }
-            else:
-                return {
-                    "success": True,
-                    "details": "SMS queued successfully",
-                    "response": result
-                }
-        else:
-            # HTTP error
-            try:
-                error_data = response.json()
-                error_msg = error_data.get("ErrorMessage", response.text)
-            except:
-                error_msg = response.text
-            
-            return {
-                "success": False,
-                "error": f"HTTP {response.status_code}: {error_msg}"
-            }
-            
-    except requests.exceptions.Timeout:
-        return {"success": False, "error": "Request timeout (30 seconds). Africa's Talking API might be slow or unreachable."}
-    except requests.exceptions.ConnectionError as e:
-        return {"success": False, "error": f"Connection error: Cannot reach Africa's Talking API. {str(e)}"}
-    except Exception as e:
-        frappe.log_error(frappe.get_traceback(), "Church SMS API Error")
-        return {"success": False, "error": f"Unexpected error: {str(e)}"}
-
-
-@frappe.whitelist()
-def test_sms_connection():
-    """Test SMS API connection without sending"""
-    try:
-        settings = frappe.get_single("Church SMS Settings")
-        
-        username = settings.api_key
-        api_key = settings.get_password("api_secret")
-        
-        if not username or not api_key:
-            return {"success": False, "message": "❌ API credentials not configured"}
-        
-        # Try to get user info (lightweight API call)
-        url = "https://api.africastalking.com/version1/user"
-        headers = {
-            "Accept": "application/json",
-            "apiKey": api_key
-        }
-        params = {"username": username}
-        
-        response = requests.get(url, headers=headers, params=params, timeout=10)
-        
-        if response.status_code == 200:
-            data = response.json()
-            user_data = data.get("UserData", {})
-            balance = user_data.get("balance", "Unknown")
-            
             return {
                 "success": True,
-                "message": f"✅ Connection successful!\n\nUsername: {username}\nBalance: {balance}"
+                "details": f"Sent to {len(phone_numbers)} recipients via Kilakona (Method 1)",
+                "response": response.text
             }
-        else:
-            return {
-                "success": False,
-                "message": f"❌ Connection failed (HTTP {response.status_code})\n\n{response.text}"
-            }
-            
+        
+        return {"success": False, "error": f"Method 1 failed: HTTP {response.status_code}"}
+        
     except Exception as e:
-        return {"success": False, "message": f"❌ Error: {str(e)}"}
+        frappe.log_error(title="Church SMS - Method 1 Error", message=str(e))
+        return {"success": False, "error": f"Method 1 error: {str(e)}"}
+
+
+def try_kilakona_method2(username, password, sender_id, phone_numbers, message):
+    """Method 2: Form POST with credentials in body"""
+    try:
+        url = "http://sms.kilakona.co.tz/api/sendsms"
+        
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/x-www-form-urlencoded"
+        }
+        
+        payload = {
+            "username": username,
+            "password": password,
+            "sender": sender_id,
+            "message": message,
+            "numbers": ",".join(phone_numbers)
+        }
+        
+        frappe.log_error(
+            title="Church SMS - Method 2 (Form POST)",
+            message=f"URL: {url}\nPayload: {payload}"
+        )
+        
+        response = requests.post(url, data=payload, headers=headers, timeout=30)
+        
+        frappe.log_error(
+            title="Church SMS - Method 2 Response",
+            message=f"Status: {response.status_code}\nResponse: {response.text}"
+        )
+        
+        if response.status_code in [200, 201]:
+            return {
+                "success": True,
+                "details": f"Sent to {len(phone_numbers)} recipients via Kilakona (Method 2)",
+                "response": response.text
+            }
+        
+        return {"success": False, "error": f"Method 2 failed: HTTP {response.status_code}"}
+        
+    except Exception as e:
+        frappe.log_error(title="Church SMS - Method 2 Error", message=str(e))
+        return {"success": False, "error": f"Method 2 error: {str(e)}"}
+
+
+def try_kilakona_method3(username, password, sender_id, phone_numbers, message):
+    """Method 3: GET request with query parameters"""
+    try:
+        url = "http://sms.kilakona.co.tz/api/sendsms"
+        
+        params = {
+            "username": username,
+            "password": password,
+            "sender": sender_id,
+            "message": message,
+            "mobiles": ",".join(phone_numbers)
+        }
+        
+        frappe.log_error(
+            title="Church SMS - Method 3 (GET)",
+            message=f"URL: {url}\nParams: {params}"
+        )
+        
+        response = requests.get(url, params=params, timeout=30)
+        
+        frappe.log_error(
+            title="Church SMS - Method 3 Response",
+            message=f"Status: {response.status_code}\nResponse: {response.text}"
+        )
+        
+        if response.status_code in [200, 201]:
+            return {
+                "success": True,
+                "details": f"Sent to {len(phone_numbers)} recipients via Kilakona (Method 3)",
+                "response": response.text
+            }
+        
+        return {"success": False, "error": f"Method 3 failed: HTTP {response.status_code}"}
+        
+    except Exception as e:
+        frappe.log_error(title="Church SMS - Method 3 Error", message=str(e))
+        return {"success": False, "error": f"Method 3 error: {str(e)}"}
 
 
 def validate_sms(doc, method):
     """Validate Church SMS before save"""
     if not doc.message:
         frappe.throw(_("Please enter a message"))
-    
-    if len(doc.message) > 160:
-        segments = (len(doc.message) + 159) // 160
-        frappe.msgprint(
-            _("Message is {0} characters and will be sent as {1} SMS segments").format(len(doc.message), segments),
-            indicator="orange"
-        )
-
-
-@frappe.whitelist()
-def import_member(full_name, phone_number, branch="", status="Active"):
-    """Import a single church member"""
-    try:
-        if not full_name or not phone_number:
-            return {"success": False, "message": "full_name and phone_number are required"}
-        
-        # Check if member already exists
-        existing = frappe.db.exists("Church Member", {"full_name": full_name})
-        if existing:
-            return {"success": False, "message": "Member already exists: " + full_name}
-        
-        # Format phone number
-        formatted_phone = format_phone(phone_number)
-        
-        # Create member
-        member = frappe.get_doc({
-            "doctype": "Church Member",
-            "full_name": full_name,
-            "phone_number": phone_number,
-            "branch": branch if branch else None,
-            "status": status or "Active"
-        })
-        member.insert(ignore_permissions=True)
-        
-        return {
-            "success": True,
-            "message": "Imported: " + full_name,
-            "name": member.name
-        }
-        
-    except Exception as e:
-        return {"success": False, "message": str(e)}
-
-
-@frappe.whitelist()
-def bulk_import_members(csv_data):
-    """Bulk import members from CSV data (JSON string)"""
-    import json
-    
-    if isinstance(csv_data, str):
-        csv_data = json.loads(csv_data)
-    
-    results = {"imported": 0, "failed": 0, "errors": []}
-    
-    for row in csv_data:
-        result = import_member(
-            full_name=row.get("full_name", ""),
-            phone_number=row.get("phone_number", ""),
-            branch=row.get("branch", ""),
-            status=row.get("status", "Active")
-        )
-        
-        if result.get("success"):
-            results["imported"] += 1
-        else:
-            results["failed"] += 1
-            results["errors"].append(f"{row.get('full_name', 'Unknown')}: {result.get('message', 'Unknown error')}")
-    
-    return results
-
-
-@frappe.whitelist()
-def diagnose_sms_setup():
-    """Diagnose SMS setup and show detailed information"""
-    result = []
-    
-    try:
-        # Get settings
-        settings = frappe.get_single("Church SMS Settings")
-        
-        result.append("📋 **Church SMS Settings:**")
-        result.append(f"- API Key (username): `{settings.api_key}`")
-        result.append(f"- API Secret (API key): `{'*' * 8}...{settings.get_password('api_secret')[-4:] if settings.get_password('api_secret') else 'NOT SET'}`")
-        result.append(f"- Default Sender ID: `{settings.default_sender_id or 'NOT SET'}`")
-        result.append("")
-        
-        username = settings.api_key
-        api_key = settings.get_password("api_secret")
-        
-        if not username or not api_key:
-            result.append("❌ **Missing credentials**")
-            result.append("Please set both API Key and API Secret in Church SMS Settings")
-            return "\n".join(result)
-        
-        # Test 1: Try Africa's Talking with current mapping
-        result.append("🧪 **Test 1: Africa's Talking API (Current Mapping)**")
-        result.append(f"- Username: `{username}`")
-        result.append(f"- API Key: `{api_key[:8]}...{api_key[-4:]}`")
-        
-        try:
-            url = "https://api.africastalking.com/version1/user"
-            headers = {
-                "Accept": "application/json",
-                "apiKey": api_key
-            }
-            params = {"username": username}
-            
-            response = requests.get(url, headers=headers, params=params, timeout=10)
-            
-            if response.status_code == 200:
-                data = response.json()
-                user_data = data.get("UserData", {})
-                balance = user_data.get("balance", "Unknown")
-                result.append(f"✅ **SUCCESS!**")
-                result.append(f"- Balance: {balance}")
-                result.append(f"- Your credentials are correct!")
-                return "\n".join(result)
-            else:
-                result.append(f"❌ Failed: HTTP {response.status_code}")
-                try:
-                    error_data = response.json()
-                    result.append(f"- Error: {error_data.get('ErrorMessage', response.text)}")
-                except:
-                    result.append(f"- Response: {response.text[:200]}")
-        except Exception as e:
-            result.append(f"❌ Error: {str(e)}")
-        
-        result.append("")
-        
-        # Test 2: Try with swapped credentials
-        result.append("🧪 **Test 2: Africa's Talking (Swapped Mapping)**")
-        result.append(f"- Username: `{api_key[:20]}...`")
-        result.append(f"- API Key: `{username}`")
-        
-        try:
-            headers = {
-                "Accept": "application/json",
-                "apiKey": username  # Swapped
-            }
-            params = {"username": api_key}  # Swapped
-            
-            response = requests.get(url, headers=headers, params=params, timeout=10)
-            
-            if response.status_code == 200:
-                data = response.json()
-                user_data = data.get("UserData", {})
-                balance = user_data.get("balance", "Unknown")
-                result.append(f"✅ **SUCCESS with swapped credentials!**")
-                result.append(f"- Balance: {balance}")
-                result.append(f"")
-                result.append(f"⚠️ **Your credentials are swapped in Church SMS Settings!**")
-                result.append(f"Please swap them:")
-                result.append(f"- API Key field should be: `{api_key}`")
-                result.append(f"- API Secret field should be: `{username}`")
-                return "\n".join(result)
-            else:
-                result.append(f"❌ Failed: HTTP {response.status_code}")
-        except Exception as e:
-            result.append(f"❌ Error: {str(e)}")
-        
-        result.append("")
-        
-        # Test 3: Check if it's a sandbox account
-        result.append("🧪 **Test 3: Africa's Talking Sandbox**")
-        try:
-            sandbox_url = "https://api.sandbox.africastalking.com/version1/user"
-            headers = {
-                "Accept": "application/json",
-                "apiKey": api_key
-            }
-            params = {"username": "sandbox"}
-            
-            response = requests.get(sandbox_url, headers=headers, params=params, timeout=10)
-            
-            if response.status_code == 200:
-                result.append("✅ Sandbox API is accessible")
-                result.append("If you're using sandbox, your username should be 'sandbox'")
-            else:
-                result.append(f"❌ Sandbox test failed: HTTP {response.status_code}")
-        except Exception as e:
-            result.append(f"❌ Error: {str(e)}")
-        
-        result.append("")
-        result.append("💡 **Next Steps:**")
-        result.append("1. Verify your Africa's Talking credentials at https://account.africastalking.com")
-        result.append("2. Check if you're using sandbox or production")
-        result.append("3. Ensure your API key has SMS permissions")
-        result.append("4. If using a different SMS provider, let me know which one")
-        
-    except Exception as e:
-        result.append(f"❌ **Error:** {str(e)}")
-        frappe.log_error(frappe.get_traceback(), "SMS Diagnosis Error")
-    
-    return "\n".join(result)
 
 
 def check_app_permission():
@@ -513,73 +301,130 @@ def check_app_permission():
 
 
 @frappe.whitelist()
-def send_via_beem(sender_id, phone_numbers, message, api_key, api_secret):
-    """Send SMS via Beem Africa API"""
-    import urllib.parse
+def update_sms_password(new_password):
+    """Update the API Secret (password) in Church SMS Settings"""
+    settings = frappe.get_single("Church SMS Settings")
+    settings.api_secret = new_password
+    settings.save(ignore_permissions=True)
+    return {"success": True, "message": "Password updated successfully"}
+
+
+@frappe.whitelist()
+def bulk_delete_members(member_names):
+    """Bulk delete church members"""
+    if isinstance(member_names, str):
+        member_names = json.loads(member_names)
     
+    deleted = 0
+    errors = []
+    
+    for name in member_names:
+        try:
+            frappe.delete_doc("Church Member", name, ignore_permissions=True)
+            deleted += 1
+        except Exception as e:
+            errors.append(f"{name}: {str(e)}")
+    
+    return {
+        "deleted": deleted,
+        "errors": errors,
+        "message": f"Deleted {deleted} members. {len(errors)} errors." if errors else f"Successfully deleted {deleted} members."
+    }
+
+
+@frappe.whitelist()
+def bulk_update_members(member_names, field, value):
+    """Bulk update a field for multiple church members"""
+    if isinstance(member_names, str):
+        member_names = json.loads(member_names)
+    
+    updated = 0
+    errors = []
+    
+    for name in member_names:
+        try:
+            frappe.db.set_value("Church Member", name, field, value)
+            updated += 1
+        except Exception as e:
+            errors.append(f"{name}: {str(e)}")
+    
+    frappe.db.commit()
+    
+    return {
+        "updated": updated,
+        "errors": errors,
+        "message": f"Updated {updated} members." + (f" {len(errors)} errors." if errors else "")
+    }
+
+
+@frappe.whitelist()
+def test_kilakona_connection():
+    """Test Kilakona API connection with detailed logging"""
+    settings = frappe.get_single("Church SMS Settings")
+    username = settings.api_key
+    password = settings.get_password("api_secret")
+    
+    result = []
+    result.append(f"**Settings:**")
+    result.append(f"- Username: `{username}`")
+    result.append(f"- Password: `{'*' * (len(password) - 4)}{password[-4:] if password else 'NOT SET'}`")
+    result.append(f"- Sender ID: `{settings.default_sender_id}`")
+    result.append("")
+    
+    if not username or not password:
+        return {"success": False, "message": "❌ Credentials not set"}
+    
+    # Try to connect
     try:
-        url = "https://apisms.beem.africa/v1/send"
+        # Test with a simple request
+        url = "http://sms.kilakona.co.tz/api/sendsms"
         
-        # Beem uses Basic Auth
         import base64
-        auth_string = base64.b64encode(f"{api_key}:{api_secret}".encode()).decode()
+        auth_string = base64.b64encode(f"{username}:{password}".encode()).decode()
         
+        # Test with minimal params
         headers = {
             "Accept": "application/json",
             "Content-Type": "application/json",
             "Authorization": f"Basic {auth_string}"
         }
         
-        # Beem expects an array of recipients
-        recipients = []
-        for i, phone in enumerate(phone_numbers):
-            # Beem expects numbers without + sign
-            clean_phone = phone.replace("+", "")
-            recipients.append({
-                "recipient_id": i + 1,
-                "dest_addr": clean_phone
-            })
+        # Try balance check or auth check
+        test_url = "http://sms.kilakona.co.tz/api/balance"
+        response = requests.get(test_url, headers=headers, timeout=10)
         
-        payload = {
-            "source_addr": sender_id or "KKKT MABIBO",
-            "schedule_time": "",
-            "encoding": "0",
-            "message": message,
-            "recipients": recipients,
-            "validity_period": 240
-        }
+        result.append(f"**Balance Check:**")
+        result.append(f"- Status: {response.status_code}")
+        result.append(f"- Response: {response.text[:300]}")
         
-        frappe.logger().info(f"Church SMS (Beem): Sending to {len(phone_numbers)} recipients")
+        if response.status_code == 200:
+            result.append("✅ **Connection successful!**")
+            return {"success": True, "message": "\n".join(result)}
         
-        response = requests.post(url, json=payload, headers=headers, timeout=30)
+        # Try alternative endpoints
+        test_urls = [
+            "http://sms.kilakona.co.tz/api/getbalance",
+            "http://sms.kilakona.co.tz/api/checkbalance",
+            "http://sms.kilakona.co.tz/api/auth",
+            "http://sms.kilakona.co.tz/api/userinfo",
+            "http://sms.kilakona.co.tz/app/api/balance",
+        ]
         
-        frappe.logger().info(f"Church SMS (Beem) Response {response.status_code}: {response.text}")
-        
-        if response.status_code in [200, 201]:
+        for test_url in test_urls:
             try:
-                result = response.json()
-                return {
-                    "success": True,
-                    "details": f"Sent to {len(phone_numbers)} recipients via Beem Africa",
-                    "response": result
-                }
+                resp = requests.get(test_url, headers=headers, timeout=5)
+                result.append(f"- {test_url}: HTTP {resp.status_code} - {resp.text[:100]}")
+                if resp.status_code == 200:
+                    result.append(f"✅ **Found working endpoint: {test_url}**")
+                    return {"success": True, "message": "\n".join(result)}
             except:
-                return {
-                    "success": True,
-                    "details": f"SMS sent via Beem. Response: {response.text[:200]}"
-                }
-        else:
-            try:
-                error = response.json()
-                return {
-                    "success": False,
-                    "error": f"HTTP {response.status_code}: {error}"
-                }
-            except:
-                return {
-                    "success": False,
-                    "error": f"HTTP {response.status_code}: {response.text[:300]}"
-                }
-                
+                result.append(f"- {test_url}: Connection failed")
+        
+        result.append("")
+        result.append("❌ All connection tests failed")
+        result.append("Please verify credentials at sms.kilakona.co.tz")
+        
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        result.append(f"❌ Error: {str(e)}")
+    
+    return {"success": False, "message": "\n".join(result)}
