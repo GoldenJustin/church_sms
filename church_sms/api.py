@@ -2,10 +2,10 @@ import frappe
 import requests
 import json
 from frappe import _
-from datetime import datetime, timedelta
+from datetime import datetime
 
 @frappe.whitelist()
-def send_church_sms(send_to, message, sender_id, branch="", members=None):
+def send_church_sms(send_to, message, sender_id, branch="", members=None, manual_numbers=None):
     """Send SMS to church members via Kilakona API with personalization"""
     try:
         settings = frappe.get_single("Church SMS Settings")
@@ -22,8 +22,11 @@ def send_church_sms(send_to, message, sender_id, branch="", members=None):
         if not sender_id:
             sender_id = settings.default_sender_id or "KKKT MABIBO"
         
-        # Get recipients with their details for personalization
-        recipients = get_recipients_with_details(send_to, branch, members)
+        # Get recipients based on send_to type
+        if send_to == "Manual Numbers":
+            recipients = parse_manual_numbers(manual_numbers)
+        else:
+            recipients = get_recipients_with_details(send_to, branch, members)
         
         if not recipients:
             return {
@@ -59,7 +62,7 @@ def send_church_sms(send_to, message, sender_id, branch="", members=None):
                 total_sent += 1
             else:
                 total_failed += 1
-                errors.append(f"{recipient['name']}: {result.get('error', 'Unknown')}")
+                errors.append(f"{recipient.get('name', recipient['phone'])}: {result.get('error', 'Unknown')}")
         
         details = f"✅ Sent: {total_sent}"
         if total_failed > 0:
@@ -78,6 +81,29 @@ def send_church_sms(send_to, message, sender_id, branch="", members=None):
             "success": False,
             "message": "❌ Error: " + str(e)
         }
+
+
+def parse_manual_numbers(manual_numbers):
+    """Parse manual phone numbers from text"""
+    if not manual_numbers:
+        return []
+    
+    recipients = []
+    # Split by comma or newline
+    numbers = manual_numbers.replace(",", "\n").split("\n")
+    
+    for num in numbers:
+        num = num.strip()
+        if num:
+            phone = format_phone(num)
+            if phone:
+                recipients.append({
+                    "name": phone,  # Use phone as name for manual numbers
+                    "phone": phone,
+                    "branch": ""
+                })
+    
+    return recipients
 
 
 def personalize_message(message, recipient):
@@ -223,7 +249,6 @@ def get_sms_balance():
         if not token:
             return {"success": False, "error": "Authentication failed"}
         
-        # Try to get balance (endpoint might vary)
         url = "https://messaging.kilakona.co.tz/api/v1/users/balance"
         headers = {"Authorization": f"Bearer {token}"}
         response = requests.get(url, headers=headers, timeout=10)
@@ -241,15 +266,11 @@ def get_sms_balance():
 def get_sms_statistics():
     """Get SMS statistics for dashboard"""
     try:
-        # Get total SMS sent
         total_sms = frappe.db.count("Church SMS")
-        
-        # Get by status
         sent = frappe.db.count("Church SMS", {"status": "Sent"})
         failed = frappe.db.count("Church SMS", {"status": "Failed"})
         draft = frappe.db.count("Church SMS", {"status": "Draft"})
         
-        # Get recent campaigns
         recent = frappe.get_all(
             "Church SMS",
             fields=["name", "creation", "status", "send_to"],
@@ -257,7 +278,6 @@ def get_sms_statistics():
             limit=5
         )
         
-        # Get member count
         total_members = frappe.db.count("Church Member", {"status": "Active"})
         
         return {
@@ -279,6 +299,9 @@ def validate_sms(doc, method):
     """Validate Church SMS before save"""
     if not doc.message:
         frappe.throw(_("Please enter a message"))
+    
+    if doc.send_to == "Manual Numbers" and not doc.manual_numbers:
+        frappe.throw(_("Please enter phone numbers"))
 
 
 def check_app_permission():
