@@ -1,0 +1,111 @@
+{
+ "actions": [],
+ "autoname": "naming_series:",
+ "creation": "2026-02-28 19:00:00",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "send_to",
+  "branch",
+  "manual_numbers",
+  "sender_id",
+  "message",
+  "status",
+  "response",
+  "members"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "SMS-.YYYY.-",
+   "reqd": 1
+  },
+  {
+   "fieldname": "send_to",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Send To",
+   "options": "\nAll Members\nSpecific Branch\nSpecific Members\nManual Numbers",
+   "reqd": 1
+  },
+  {
+   "fieldname": "branch",
+   "fieldtype": "Link",
+   "label": "Branch",
+   "options": "Church Branch",
+   "depends_on": "eval:doc.send_to=='Specific Branch'"
+  },
+  {
+   "fieldname": "manual_numbers",
+   "fieldtype": "Small Text",
+   "label": "Manual Phone Numbers",
+   "description": "Enter phone numbers separated by commas or new lines",
+   "depends_on": "eval:doc.send_to=='Manual Numbers'",
+   "mandatory_depends_on": "eval:doc.send_to=='Manual Numbers'"
+  },
+  {
+   "fieldname": "sender_id",
+   "fieldtype": "Data",
+   "label": "Sender ID",
+   "default": "KKKT MABIBO"
+  },
+  {
+   "fieldname": "message",
+   "fieldtype": "Small Text",
+   "in_list_view": 1,
+   "label": "Message",
+   "reqd": 1,
+   "description": "Use {{name}} to personalize with recipient's name"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "\nDraft\nSent\nFailed",
+   "default": "Draft",
+   "read_only": 1
+  },
+  {
+   "fieldname": "response",
+   "fieldtype": "Small Text",
+   "label": "Response",
+   "read_only": 1
+  },
+  {
+   "fieldname": "members",
+   "fieldtype": "Table",
+   "label": "Recipients",
+   "options": "Church SMS Recipient",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-08-05 15:00:00",
+ "modified_by": "Administrator",
+ "module": "ChurchSMS",
+ "name": "Church SMS",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 1
+}

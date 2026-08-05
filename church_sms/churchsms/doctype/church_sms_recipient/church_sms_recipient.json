@@ -1,0 +1,47 @@
+{
+ "actions": [],
+ "creation": "2026-02-28 19:00:00",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "member",
+  "phone",
+  "status"
+ ],
+ "fields": [
+  {
+   "fieldname": "member",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Member",
+   "options": "Church Member"
+  },
+  {
+   "fieldname": "phone",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Phone",
+   "options": "Phone"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "\nSent\nFailed\nPending"
+  }
+ ],
+ "istable": 1,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-08-05 15:00:00",
+ "modified_by": "Administrator",
+ "module": "ChurchSMS",
+ "name": "Church SMS Recipient",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 1
+}

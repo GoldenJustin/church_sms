@@ -1,0 +1,61 @@
+{
+ "actions": [],
+ "creation": "2026-02-28 19:00:00",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "api_key",
+  "api_secret",
+  "default_sender_id"
+ ],
+ "fields": [
+  {
+   "fieldname": "api_key",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "API Key",
+   "reqd": 1,
+   "description": "Your Kilakona login ID"
+  },
+  {
+   "fieldname": "api_secret",
+   "fieldtype": "Password",
+   "in_list_view": 1,
+   "label": "API Secret",
+   "reqd": 1,
+   "description": "Your Kilakona password"
+  },
+  {
+   "fieldname": "default_sender_id",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Default Sender ID",
+   "default": "KKKT MABIBO",
+   "description": "Default sender ID for SMS"
+  }
+ ],
+ "issingle": 1,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-08-05 15:00:00",
+ "modified_by": "Administrator",
+ "module": "ChurchSMS",
+ "name": "Church SMS Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 1
+}
