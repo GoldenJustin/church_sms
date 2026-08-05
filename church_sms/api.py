@@ -505,3 +505,81 @@ def diagnose_sms_setup():
         frappe.log_error(frappe.get_traceback(), "SMS Diagnosis Error")
     
     return "\n".join(result)
+
+
+def check_app_permission():
+    """Check if user has permission to see the app"""
+    return True
+
+
+@frappe.whitelist()
+def send_via_beem(sender_id, phone_numbers, message, api_key, api_secret):
+    """Send SMS via Beem Africa API"""
+    import urllib.parse
+    
+    try:
+        url = "https://apisms.beem.africa/v1/send"
+        
+        # Beem uses Basic Auth
+        import base64
+        auth_string = base64.b64encode(f"{api_key}:{api_secret}".encode()).decode()
+        
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "Authorization": f"Basic {auth_string}"
+        }
+        
+        # Beem expects an array of recipients
+        recipients = []
+        for i, phone in enumerate(phone_numbers):
+            # Beem expects numbers without + sign
+            clean_phone = phone.replace("+", "")
+            recipients.append({
+                "recipient_id": i + 1,
+                "dest_addr": clean_phone
+            })
+        
+        payload = {
+            "source_addr": sender_id or "KKKT MABIBO",
+            "schedule_time": "",
+            "encoding": "0",
+            "message": message,
+            "recipients": recipients,
+            "validity_period": 240
+        }
+        
+        frappe.logger().info(f"Church SMS (Beem): Sending to {len(phone_numbers)} recipients")
+        
+        response = requests.post(url, json=payload, headers=headers, timeout=30)
+        
+        frappe.logger().info(f"Church SMS (Beem) Response {response.status_code}: {response.text}")
+        
+        if response.status_code in [200, 201]:
+            try:
+                result = response.json()
+                return {
+                    "success": True,
+                    "details": f"Sent to {len(phone_numbers)} recipients via Beem Africa",
+                    "response": result
+                }
+            except:
+                return {
+                    "success": True,
+                    "details": f"SMS sent via Beem. Response: {response.text[:200]}"
+                }
+        else:
+            try:
+                error = response.json()
+                return {
+                    "success": False,
+                    "error": f"HTTP {response.status_code}: {error}"
+                }
+            except:
+                return {
+                    "success": False,
+                    "error": f"HTTP {response.status_code}: {response.text[:300]}"
+                }
+                
+    except Exception as e:
+        return {"success": False, "error": str(e)}
