@@ -307,3 +307,48 @@ def validate_sms(doc, method):
 def check_app_permission():
     """Check if user has permission to see the app"""
     return True
+
+
+@frappe.whitelist()
+def bulk_import_members(members):
+    """Bulk import church members from JSON/CSV data"""
+    import json
+    
+    if isinstance(members, str):
+        members = json.loads(members)
+    
+    imported = 0
+    failed = 0
+    errors = []
+    
+    for member_data in members:
+        try:
+            # Check if member already exists
+            if frappe.db.exists("Church Member", member_data.get("full_name")):
+                errors.append(f"{member_data.get('full_name')}: Already exists")
+                failed += 1
+                continue
+            
+            # Create new member
+            member = frappe.get_doc({
+                "doctype": "Church Member",
+                "full_name": member_data.get("full_name"),
+                "phone_number": member_data.get("phone_number"),
+                "branch": member_data.get("branch", ""),
+                "status": member_data.get("status", "Active")
+            })
+            member.insert(ignore_permissions=True)
+            imported += 1
+            
+        except Exception as e:
+            failed += 1
+            errors.append(f"{member_data.get('full_name', 'Unknown')}: {str(e)}")
+    
+    frappe.db.commit()
+    
+    return {
+        "imported": imported,
+        "failed": failed,
+        "errors": errors[:10],  # Return first 10 errors
+        "message": f"Imported {imported} members, {failed} failed"
+    }
