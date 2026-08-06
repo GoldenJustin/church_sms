@@ -197,10 +197,8 @@ def get_kilakona_token(login_id, password):
         return None
 
 
-def send_single_sms(token, sender_id, phone, message, scheduled_sms=None):
-    """Send single SMS via Kilakona API and log it"""
-    from datetime import datetime
-    
+def send_single_sms(token, sender_id, phone, message):
+    """Send single SMS via Kilakona API"""
     try:
         url = "https://messaging.kilakona.co.tz/api/v1/users/message/send"
         headers = {
@@ -220,71 +218,12 @@ def send_single_sms(token, sender_id, phone, message, scheduled_sms=None):
         if response.status_code == 200:
             result = response.json()
             if result.get("success"):
-                # Log successful SMS
-                log_doc = frappe.get_doc({
-                    "doctype": "SMS Log",
-                    "recipient": phone,
-                    "message": message,
-                    "sender_id": sender_id,
-                    "status": "Sent",
-                    "response": str(result),
-                    "scheduled_sms": scheduled_sms,
-                    "sent_at": datetime.now()
-                })
-                log_doc.insert(ignore_permissions=True)
-                frappe.db.commit()
-                
                 return {"success": True, "shoot_id": result.get("data", {}).get("shootId")}
             else:
-                # Log failed SMS
-                log_doc = frappe.get_doc({
-                    "doctype": "SMS Log",
-                    "recipient": phone,
-                    "message": message,
-                    "sender_id": sender_id,
-                    "status": "Failed",
-                    "response": result.get("message", "Failed"),
-                    "scheduled_sms": scheduled_sms,
-                    "sent_at": datetime.now()
-                })
-                log_doc.insert(ignore_permissions=True)
-                frappe.db.commit()
-                
                 return {"success": False, "error": result.get("message", "Failed")}
         else:
-            # Log failed SMS
-            log_doc = frappe.get_doc({
-                "doctype": "SMS Log",
-                "recipient": phone,
-                "message": message,
-                "sender_id": sender_id,
-                "status": "Failed",
-                "response": f"HTTP {response.status_code}",
-                "scheduled_sms": scheduled_sms,
-                "sent_at": datetime.now()
-            })
-            log_doc.insert(ignore_permissions=True)
-            frappe.db.commit()
-            
             return {"success": False, "error": f"HTTP {response.status_code}"}
     except Exception as e:
-        # Log exception
-        try:
-            log_doc = frappe.get_doc({
-                "doctype": "SMS Log",
-                "recipient": phone,
-                "message": message,
-                "sender_id": sender_id,
-                "status": "Failed",
-                "response": str(e),
-                "scheduled_sms": scheduled_sms,
-                "sent_at": datetime.now()
-            })
-            log_doc.insert(ignore_permissions=True)
-            frappe.db.commit()
-        except:
-            pass
-        
         return {"success": False, "error": str(e)}
 
 
