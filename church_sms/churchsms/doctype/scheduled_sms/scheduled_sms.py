@@ -103,3 +103,60 @@ class ScheduledSMS(Document):
                         self.next_scheduled = next_dt
                 else:
                     self.next_scheduled = next_dt
+
+
+def process_scheduled_sms():
+    """Called by scheduler to process and send due scheduled SMS"""
+    from datetime import datetime
+    
+    # Get all active scheduled SMS that are due
+    scheduled_list = frappe.get_all(
+        "Scheduled SMS",
+        filters={
+            "status": "Active",
+            "next_scheduled": ["<=", datetime.now()]
+        },
+        fields=["name", "title", "message", "send_to", "branch", "sender_id"]
+    )
+    
+    if not scheduled_list:
+        return
+    
+    for scheduled in scheduled_list:
+        try:
+            doc = frappe.get_doc("Scheduled SMS", scheduled.name)
+            
+            # Send the SMS
+            from church_sms.api import send_church_sms
+            result = send_church_sms(
+                send_to=doc.send_to,
+                message=doc.message,
+                sender_id=doc.sender_id,
+                branch=doc.branch
+            )
+            
+            # Update the document
+            if result.get("success"):
+                doc.times_sent = (doc.times_sent or 0) + 1
+                doc.last_sent = datetime.now()
+                
+                # Calculate next scheduled time for recurring
+                if doc.schedule_type != "Once":
+                    doc.update_next_scheduled()
+                else:
+                    doc.status = "Completed"
+                    doc.next_scheduled = None
+                
+                doc.save(ignore_permissions=True)
+                frappe.db.commit()
+                
+                frappe.logger().info(f"Scheduled SMS '{doc.title}' sent successfully")
+            else:
+                frappe.logger().error(f"Scheduled SMS '{doc.title}' failed: {result.get('message')}")
+                
+        except Exception as e:
+            frappe.log_error(
+                f"Error processing scheduled SMS {scheduled.name}: {str(e)}",
+                "Scheduled SMS Error"
+            )
+            frappe.db.rollback()
