@@ -352,3 +352,38 @@ def bulk_import_members(members):
         "errors": errors[:10],  # Return first 10 errors
         "message": f"Imported {imported} members, {failed} failed"
     }
+
+
+@frappe.whitelist()
+def import_member(full_name, phone_number, branch="", status="Active"):
+    """Import a single church member (called by import page for each row)"""
+    try:
+        # Check if member already exists
+        if frappe.db.exists("Church Member", full_name):
+            return {
+                "success": False,
+                "message": f"Member '{full_name}' already exists"
+            }
+        
+        # Create new member
+        member = frappe.get_doc({
+            "doctype": "Church Member",
+            "full_name": full_name,
+            "phone_number": phone_number,
+            "branch": branch if branch else None,
+            "status": status
+        })
+        member.insert(ignore_permissions=True)
+        frappe.db.commit()
+        
+        return {
+            "success": True,
+            "message": f"Successfully imported {full_name}"
+        }
+        
+    except Exception as e:
+        frappe.db.rollback()
+        return {
+            "success": False,
+            "message": f"Error importing {full_name}: {str(e)}"
+        }
