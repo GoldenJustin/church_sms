@@ -1,38 +1,21 @@
 frappe.ui.form.on('Church SMS', {
-    send_to: function(frm) {
+    refresh: function(frm) {
         // Show/hide fields based on send_to
         frm.toggle_display('branch', frm.doc.send_to === 'Specific Branch');
         frm.toggle_display('manual_numbers', frm.doc.send_to === 'Manual Numbers');
         
-        // Make fields mandatory
-        frm.toggle_reqd('branch', frm.doc.send_to === 'Specific Branch');
-        frm.toggle_reqd('manual_numbers', frm.doc.send_to === 'Manual Numbers');
-    },
-    
-    refresh: function(frm) {
-        // Trigger send_to on refresh
-        frm.trigger('send_to');
-        
-        // Add Send SMS button
-        if (!frm.is_new() && frm.doc.docstatus === 0) {
-            frm.add_custom_button(__('Send SMS'), function() {
-                // Prepare arguments
-                var args = {
-                    send_to: frm.doc.send_to,
-                    message: frm.doc.message,
-                    sender_id: frm.doc.sender_id || 'KKKT MABIBO',
-                    branch: frm.doc.branch || '',
-                    members: frm.doc.members || []
-                };
-                
-                // Add manual_numbers if applicable
-                if (frm.doc.send_to === 'Manual Numbers') {
-                    args.manual_numbers = frm.doc.manual_numbers || '';
-                }
-                
+        // Add Send SMS button for saved documents
+        if (!frm.is_new() && frm.doc.status !== 'Sent') {
+            frm.add_custom_button(__('Send SMS Now'), function() {
                 frappe.call({
                     method: 'church_sms.api.send_church_sms',
-                    args: args,
+                    args: {
+                        send_to: frm.doc.send_to,
+                        message: frm.doc.message,
+                        sender_id: frm.doc.sender_id || 'KKKT MABIBO',
+                        branch: frm.doc.branch || '',
+                        manual_numbers: frm.doc.manual_numbers || ''
+                    },
                     freeze: true,
                     freeze_message: __('Sending SMS...'),
                     callback: function(r) {
@@ -43,23 +26,33 @@ frappe.ui.form.on('Church SMS', {
                                     indicator: 'green',
                                     message: r.message.message
                                 });
-                                frm.set_value('status', 'Sent');
-                                frm.set_value('response', r.message.message);
-                                frm.save();
+                                
+                                // Reload to see updated status
+                                frm.reload_doc();
                             } else {
                                 frappe.msgprint({
                                     title: __('Failed'),
                                     indicator: 'red',
                                     message: r.message.message
                                 });
-                                frm.set_value('status', 'Failed');
-                                frm.set_value('response', r.message.message);
-                                frm.save();
                             }
                         }
                     }
                 });
             }).addClass('btn-primary');
         }
+        
+        // Show info for background jobs
+        if (frm.doc.status === 'Draft' && frm.doc.response && frm.doc.response.includes('background')) {
+            frm.dashboard.add_comment(
+                __('SMS is being sent in background. Check SMS Log for progress.'),
+                'blue',
+                true
+            );
+        }
+    },
+    
+    send_to: function(frm) {
+        frm.trigger('refresh');
     }
 });

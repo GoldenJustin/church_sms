@@ -448,3 +448,84 @@ def import_member(full_name, phone_number, branch="", status="Active"):
             "success": False,
             "message": f"Error importing {full_name}: {str(e)}"
         }
+
+
+@frappe.whitelist()
+def send_sms_background(recipients, message, sender_id, scheduled_sms=None, church_sms_doc=None):
+    """Send SMS in background for large batches"""
+    from datetime import datetime
+    
+    try:
+        # Get Kilakona token
+        settings = frappe.get_single("Church SMS Settings")
+        token = get_kilakona_token(settings.api_key, settings.get_password("api_secret"))
+        
+        if not token:
+            frappe.log_error("Failed to get Kilakona token", "SMS Background Job Error")
+            return
+        
+        total_sent = 0
+        total_failed = 0
+        
+        # Send to each recipient
+        for recipient in recipients:
+            try:
+                personalized_message = personalize_message(message, recipient)
+                
+                result = send_single_sms(
+                    token=token,
+                    sender_id=sender_id,
+                    phone=recipient["phone"],
+                    message=personalized_message,
+                    scheduled_sms=scheduled_sms
+                )
+                
+                if result.get("success"):
+                    total_sent += 1
+                else:
+                    total_failed += 1
+                
+                # Commit every 50 messages to save logs
+                if (total_sent + total_failed) % 50 == 0:
+                    frappe.db.commit()
+                    
+            except Exception as e:
+                total_failed += 1
+                frappe.log_error(f"Error sending to {recipient.get('phone')}: {str(e)}", "SMS Send Error")
+        
+        # Final commit
+        frappe.db.commit()
+        
+        # Update Church SMS document status if provided
+        if church_sms_doc:
+            try:
+                doc = frappe.get_doc("Church SMS", church_sms_doc)
+                doc.status = "Sent"
+                doc.response = f"Sent: {total_sent}, Failed: {total_failed}"
+                doc.save(ignore_permissions=True)
+                frappe.db.commit()
+            except Exception as e:
+                frappe.log_error(f"Error updating Church SMS status: {str(e)}", "SMS Status Update Error")
+        
+        # Update Scheduled SMS if applicable
+        if scheduled_sms:
+            try:
+                sched_doc = frappe.get_doc("Scheduled SMS", scheduled_sms)
+                sched_doc.times_sent = (sched_doc.times_sent or 0) + 1
+                sched_doc.last_sent = datetime.now()
+                
+                if sched_doc.schedule_type == "Once":
+                    sched_doc.status = "Completed"
+                    sched_doc.next_scheduled = None
+                else:
+                    sched_doc.update_next_scheduled()
+                
+                sched_doc.save(ignore_permissions=True)
+                frappe.db.commit()
+            except Exception as e:
+                frappe.log_error(f"Error updating Scheduled SMS: {str(e)}", "Scheduled SMS Update Error")
+        
+        frappe.logger().info(f"Background SMS job completed: {total_sent} sent, {total_failed} failed")
+        
+    except Exception as e:
+        frappe.log_error(f"Fatal error in background SMS job: {str(e)}", "SMS Background Job Fatal Error")
