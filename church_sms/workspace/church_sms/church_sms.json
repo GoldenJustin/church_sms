@@ -1,0 +1,141 @@
+{
+ "charts": [],
+ "content": "[{\"type\":\"header\",\"data\":{\"text\":\"Church SMS Management\",\"level\":3}},{\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Send SMS\"}},{\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Scheduled SMS\"}},{\"type\":\"spacer\"},{\"type\":\"header\",\"data\":{\"text\":\"Records\",\"level\":4}},{\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"SMS Log\"}},{\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Church Member\"}},{\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Church Branch\"}},{\"type\":\"spacer\"},{\"type\":\"header\",\"data\":{\"text\":\"Settings\",\"level\":4}},{\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Church SMS Settings\"}}]",
+ "creation": "2026-08-06 12:00:00",
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "for_user": "",
+ "hide_custom": 0,
+ "icon": "message",
+ "idx": 0,
+ "is_default": 0,
+ "label": "Church SMS",
+ "links": [
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Send SMS",
+   "link_count": 0,
+   "link_to": "Church SMS",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Scheduled SMS",
+   "link_count": 0,
+   "link_to": "Scheduled SMS",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "SMS Log",
+   "link_count": 0,
+   "link_to": "SMS Log",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Church Member",
+   "link_count": 0,
+   "link_to": "Church Member",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Church Branch",
+   "link_count": 0,
+   "link_to": "Church Branch",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Church SMS Settings",
+   "link_count": 0,
+   "link_to": "Church SMS Settings",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Import Members",
+   "link_count": 0,
+   "link_to": "import-members",
+   "link_type": "Page",
+   "onboard": 0,
+   "type": "Link"
+  }
+ ],
+ "modified": "2026-08-06 12:00:00",
+ "modified_by": "Administrator",
+ "module": "ChurchSMS",
+ "name": "Church SMS",
+ "number_cards": [],
+ "owner": "Administrator",
+ "parent_page": "",
+ "public": 1,
+ "restrict_to_domain": "",
+ "roles": [],
+ "sequence_id": 1,
+ "shortcuts": [
+  {
+   "color": "Blue",
+   "doc_view": "New",
+   "label": "Send SMS",
+   "link_to": "Church SMS",
+   "type": "DocType"
+  },
+  {
+   "color": "Green",
+   "doc_view": "List",
+   "label": "Scheduled SMS",
+   "link_to": "Scheduled SMS",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "SMS Log",
+   "link_to": "SMS Log",
+   "type": "DocType"
+  },
+  {
+   "color": "Orange",
+   "doc_view": "List",
+   "label": "Church Member",
+   "link_to": "Church Member",
+   "type": "DocType"
+  },
+  {
+   "color": "Purple",
+   "doc_view": "List",
+   "label": "Church Branch",
+   "link_to": "Church Branch",
+   "type": "DocType"
+  },
+  {
+   "color": "Red",
+   "doc_view": "",
+   "label": "Church SMS Settings",
+   "link_to": "Church SMS Settings",
+   "type": "DocType"
+  }
+ ],
+ "title": "Church SMS"
+}
